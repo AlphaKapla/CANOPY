@@ -1,0 +1,80 @@
+# Basic events for the ECCS pumps. One file per system keeps diffs local.
+#
+# failure_model.type is a closed enum; each type has its own required fields:
+#   probability      — per-demand probability (standby fail-to-start)
+#   rate-mission     — unavailability = 1 - exp(-rate * mission_time)
+#   rate-repair      — steady-state unavailability rate/(rate + 1/MTTR)
+#   frequency        — for events used as initiators (per_year)
+#   constant         — fixed value (e.g. true/false via house event is
+#                      preferred; use sparingly)
+#
+# Values may be inline quantities or references: {param: PAR-...}.
+basic_events:
+
+  BE-ECC-PMP-A-FTS:
+    label: "ECCS pump A fails to start on demand"
+    system: ECC
+    component: PMP-A
+    failure_mode: FTS
+    failure_model:
+      type: probability
+      value: {param: PAR-ECC-PMP-FTS}
+    provenance:
+      source: "See PAR-ECC-PMP-FTS"
+      justification: "Shared generic parameter across ECCS pumps."
+
+  BE-ECC-PMP-A-FTR:
+    label: "ECCS pump A fails to run (24 h mission)"
+    system: ECC
+    component: PMP-A
+    failure_mode: FTR
+    failure_model:
+      type: rate-mission
+      rate: {param: PAR-ECC-PMP-FR}
+      mission_time: {param: PAR-MISSION-TIME-24H}
+    provenance:
+      source: "See PAR-ECC-PMP-FR"
+      justification: "Shared generic parameter across ECCS pumps."
+
+  BE-ECC-PMP-B-FTS:
+    label: "ECCS pump B fails to start on demand"
+    system: ECC
+    component: PMP-B
+    failure_mode: FTS
+    failure_model:
+      type: probability
+      value: {param: PAR-ECC-PMP-FTS}
+    provenance:
+      source: "See PAR-ECC-PMP-FTS"
+      justification: "Shared generic parameter across ECCS pumps."
+
+  BE-ECC-PMP-B-FTR:
+    label: "ECCS pump B fails to run (24 h mission)"
+    system: ECC
+    component: PMP-B
+    failure_mode: FTR
+    failure_model:
+      type: rate-mission
+      rate: {param: PAR-ECC-PMP-FR}
+      mission_time: {param: PAR-MISSION-TIME-24H}
+    provenance:
+      source: "See PAR-ECC-PMP-FR"
+      justification: "Shared generic parameter across ECCS pumps."
+
+  # Test & maintenance unavailability modeled as its own basic event so it
+  # appears explicitly in cut sets (and can be zeroed by configuration).
+  BE-ECC-PMP-A-TM:
+    label: "ECCS pump A unavailable due to test or maintenance"
+    system: ECC
+    component: PMP-A
+    failure_mode: TM
+    failure_model:
+      type: probability
+      value: {value: 6.0e-3, unit: per_demand}
+    uncertainty:
+      distribution: beta
+      alpha: 1.5
+      beta: 248.5
+    provenance:
+      source: "Plant maintenance rule records 2023–2025"
+      justification: "Plant-specific unavailability from work-order hours."

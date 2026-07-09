@@ -1,0 +1,19 @@
+# Residual heat removal / long-term cooling (illustrative 2-train tree).
+fault_trees:
+
+  FT-RHR:
+    label: "Long-term heat removal fails (24 h mission)"
+    top_gate: GT-RHR-TOP
+    gates:
+      GT-RHR-TOP:
+        label: "RHR function fails"
+        formula:
+          and: [GT-RHR-TRAIN-A, GT-RHR-TRAIN-B]
+      GT-RHR-TRAIN-A:
+        label: "RHR train A fails"
+        formula:
+          or: [BE-RHR-PMP-A-FTS, BE-RHR-PMP-A-FTR]
+      GT-RHR-TRAIN-B:
+        label: "RHR train B fails"
+        formula:
+          or: [BE-RHR-PMP-B-FTS, BE-RHR-PMP-B-FTR]

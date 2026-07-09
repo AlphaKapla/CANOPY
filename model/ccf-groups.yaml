@@ -1,0 +1,22 @@
+# Common-cause failure groups. The engine expands these into CCF basic
+# events at compile time (never hand-author expanded CCF events).
+#
+# model is a closed enum: alpha-factor | mgl | beta-factor
+# Required factor fields depend on the model and group size; CI checks
+# count and normalization (e.g. alpha factors of a size-n group must be
+# n values that sum to ~1.0 within tolerance).
+ccf_groups:
+
+  CCF-ECC-PMP-FTS:
+    label: "ECCS pumps A/B common-cause fail to start"
+    model: alpha-factor
+    members:
+      - BE-ECC-PMP-A-FTS
+      - BE-ECC-PMP-B-FTS
+    total_probability: {param: PAR-ECC-PMP-FTS}
+    factors:
+      alpha_1: 0.9787
+      alpha_2: 0.0213
+    provenance:
+      source: "NUREG/CR-5497 alpha factors, 2023 update, MDP FTS, CCCG=2"
+      justification: "Generic 2-of-2 alpha factors; staggered testing."

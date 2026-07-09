@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Canopy — model viewer</title>
+<style>
+  :root{
+    --bg:#10141b; --panel:#161b24; --panel-2:#1c2230; --inset:#0c1016;
+    --line:#28303f; --line-soft:#1f2634;
+    --text:#e4e9f1; --dim:#8b96a8; --faint:#5b6577;
+    --gate:#6ba3d6; --be:#d9a441; --he:#a289d9;
+    --ok:#6fbe83; --fail:#d0655c; --xfer:#a289d9;
+    --readout:#8fd8dc;
+    --mono:ui-monospace,"Cascadia Code","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box; margin:0}
+  html,body{height:100%}
+  body{
+    background:var(--bg); color:var(--text); font-family:var(--sans);
+    font-size:14px; display:flex; flex-direction:column; overflow:hidden;
+  }
+  /* ---------- header ---------- */
+  header{
+    display:flex; align-items:center; gap:14px; padding:10px 16px;
+    border-bottom:1px solid var(--line); background:var(--panel);
+    flex:0 0 auto;
+  }
+  .lamp{width:9px;height:9px;border-radius:50%;background:var(--ok);
+    box-shadow:0 0 8px 1px rgba(111,190,131,.55)}
+  .model-id{font-family:var(--mono);font-size:13px;letter-spacing:.03em}
+  .model-name{color:var(--dim);font-size:12.5px}
+  .spacer{flex:1}
+  .readout{
+    font-family:var(--mono); font-size:12.5px; color:var(--readout);
+    background:var(--inset); border:1px solid var(--line);
+    border-radius:6px; padding:5px 10px; letter-spacing:.02em;
+  }
+  .readout b{color:var(--dim);font-weight:500;margin-right:6px;
+    font-family:var(--sans);font-size:10.5px;letter-spacing:.12em}
+  /* ---------- layout ---------- */
+  main{flex:1; display:flex; min-height:0}
+  nav{
+    flex:0 0 232px; border-right:1px solid var(--line);
+    background:var(--panel); display:flex; flex-direction:column; min-height:0;
+  }
+  #search{
+    margin:10px; padding:7px 10px; background:var(--inset);
+    border:1px solid var(--line); border-radius:6px; color:var(--text);
+    font-family:var(--mono); font-size:12.5px; outline:none;
+  }
+  #search:focus{border-color:var(--gate)}
+  .nav-scroll{overflow-y:auto; flex:1; padding-bottom:12px}
+  .nav-head{
+    padding:12px 14px 5px; color:var(--faint); font-size:10px;
+    letter-spacing:.18em; font-weight:600;
+  }
+  .nav-item{
+    display:block; width:100%; text-align:left; padding:6px 14px 6px 11px;
+    background:none; border:none; border-left:3px solid transparent;
+    color:var(--text); cursor:pointer; font-family:inherit;
+  }
+  .nav-item:hover{background:var(--panel-2)}
+  .nav-item.active{background:var(--panel-2)}
+  .nav-item.active.k-et{border-left-color:var(--fail)}
+  .nav-item.active.k-ft{border-left-color:var(--gate)}
+  .nav-item .nid{font-family:var(--mono); font-size:12px; display:block}
+  .nav-item .nlbl{color:var(--dim); font-size:11px; display:block;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  /* ---------- canvas ---------- */
+  #stage{flex:1; position:relative; min-width:0; background:
+    radial-gradient(ellipse at 30% 0%, #131926 0%, var(--bg) 60%)}
+  svg{position:absolute; inset:0; width:100%; height:100%; display:block;
+    cursor:grab}
+  svg.panning{cursor:grabbing}
+  .toolbar{
+    position:absolute; top:12px; right:12px; display:flex; gap:6px; z-index:2;
+  }
+  .tbtn{
+    background:var(--panel); border:1px solid var(--line); color:var(--dim);
+    border-radius:6px; padding:5px 10px; cursor:pointer; font-size:12px;
+    font-family:var(--sans);
+  }
+  .tbtn:hover{color:var(--text); border-color:var(--gate)}
+  .hint{position:absolute; left:14px; bottom:10px; color:var(--faint);
+    font-size:11px; z-index:2}
+  /* ---------- details ---------- */
+  aside{
+    flex:0 0 300px; border-left:1px solid var(--line); background:var(--panel);
+    overflow-y:auto; padding:16px;
+  }
+  aside h2{font-size:10.5px; letter-spacing:.18em; color:var(--faint);
+    font-weight:600; margin-bottom:12px}
+  .d-id{font-family:var(--mono); font-size:14px; margin-bottom:2px;
+    word-break:break-all}
+  .d-lbl{color:var(--dim); font-size:12.5px; margin-bottom:14px;
+    line-height:1.45}
+  .d-row{margin-bottom:10px}
+  .d-k{color:var(--faint); font-size:10px; letter-spacing:.14em;
+    margin-bottom:3px}
+  .d-v{font-size:12.5px; line-height:1.5}
+  .d-v.mono{font-family:var(--mono); font-size:12px}
+  .d-v .lnk{color:var(--gate); cursor:pointer; font-family:var(--mono);
+    text-decoration:none}
+  .d-v .lnk:hover{text-decoration:underline}
+  .tag{display:inline-block; padding:1px 8px; border-radius:99px;
+    font-size:11px; font-family:var(--mono); border:1px solid var(--line)}
+  .empty{color:var(--faint); font-size:12.5px; line-height:1.6}
+  /* ---------- svg pieces ---------- */
+  text{font-family:var(--sans)}
+  .e-line{stroke:var(--line); stroke-width:1.4; fill:none}
+  .node-card{fill:var(--panel-2); stroke:var(--line); rx:7}
+  .node-card.sel{stroke-width:1.6}
+  .n-id{font-family:var(--mono); font-size:11px; fill:var(--text)}
+  .n-sub{font-size:9.5px; fill:var(--dim)}
+  .n-val{font-family:var(--mono); font-size:10px; fill:var(--readout)}
+  .clickable{cursor:pointer}
+  .fe-head{font-family:var(--mono); font-size:11px; fill:var(--text);
+    cursor:pointer}
+  .fe-sub{font-size:9.5px; fill:var(--dim); cursor:pointer}
+  .seq-freq{font-family:var(--mono); font-size:10.5px; fill:var(--readout)}
+  .branch-ok{stroke:var(--ok)} .branch-fail{stroke:var(--fail)}
+  .branch-by{stroke:var(--faint); stroke-dasharray:4 4}
+  @media (prefers-reduced-motion:no-preference){
+    .nav-item,.tbtn{transition:background .12s,border-color .12s,color .12s}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="lamp"></div>
+  <span class="model-id" id="h-id"></span>
+  <span class="model-name">· Canopy</span>
+  <span class="model-name" id="h-name"></span>
+  <div class="spacer"></div>
+  <div id="h-metrics"></div>
+</header>
+<main>
+  <nav>
+    <input id="search" type="search" placeholder="find ID…"
+           aria-label="Find any ID">
+    <div class="nav-scroll" id="navlist"></div>
+  </nav>
+  <div id="stage">
+    <div class="toolbar">
+      <button class="tbtn" id="btn-expand">Expand all</button>
+      <button class="tbtn" id="btn-fit">Fit view</button>
+    </div>
+    <svg id="svg" role="img" aria-label="Model diagram">
+      <g id="world"></g>
+    </svg>
+    <div class="hint">drag to pan · scroll to zoom · click nodes for details
+      · double-click a gate to collapse</div>
+  </div>
+  <aside id="details">
+    <h2>DETAILS</h2>
+    <div class="empty">Select a tree on the left, then click any gate,
+      basic event, or sequence.</div>
+  </aside>
+</main>
+<script>
+"use strict";
+const M = /*__MODEL_JSON__*/null;
+
+const $ = (s) => document.querySelector(s);
+const SVGNS = "http://www.w3.org/2000/svg";
+function el(name, attrs, parent){
+  const n = document.createElementNS(SVGNS, name);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+function txt(node, s){ node.textContent = s; return node; }
+const sci = (x) => x == null ? "—" : x.toExpEng ? x : Number(x).toExponential(2);
+
+/* ---------------- header ---------------- */
+$("#h-id").textContent = M.model_id;
+$("#h-name").textContent = M.model_name;
+{
+  const box = $("#h-metrics");
+  const seen = new Set();
+  for (const m of M.metrics){
+    if (seen.has(m.id)) continue; seen.add(m.id);
+    const d = document.createElement("span");
+    d.className = "readout";
+    d.innerHTML = `<b>${m.id}</b>${Number(m.value_per_year).toExponential(3)} /yr`;
+    d.title = m.label;
+    box.appendChild(d);
+  }
+  if (!M.has_results){
+    const d = document.createElement("span");
+    d.className = "readout"; d.style.color = "var(--dim)";
+    d.textContent = "no quantification results loaded";
+    box.appendChild(d);
+  }
+}
+
+/* ---------------- navigation ---------------- */
+let current = null;      // current tree id
+let selected = null;     // selected entity key
+const collapsed = new Set();  // collapsed gate instance paths
+
+function buildNav(filter){
+  const list = $("#navlist"); list.innerHTML = "";
+  const f = (filter || "").toUpperCase();
+  const section = (title, ids, kind) => {
+    const ms = ids.filter(id => !f || id.toUpperCase().includes(f) ||
+      (labelOf(id) || "").toUpperCase().includes(f));
+    if (!ms.length) return;
+    const h = document.createElement("div");
+    h.className = "nav-head"; h.textContent = title; list.appendChild(h);
+    for (const id of ms){
+      const b = document.createElement("button");
+      b.className = `nav-item k-${kind}` + (id === current ? " active" : "");
+      b.innerHTML = `<span class="nid">${id}</span>
+                     <span class="nlbl">${labelOf(id)}</span>`;
+      b.onclick = () => show(id);
+      list.appendChild(b);
+    }
+  };
+  section("EVENT TREES", Object.keys(M.event_trees).sort(), "et");
+  section("FAULT TREES", Object.keys(M.fault_trees).sort(), "ft");
+}
+function labelOf(id){
+  return (M.event_trees[id] || M.fault_trees[id] || M.gates[id] ||
+          M.basic_events[id] || M.house_events[id] || {}).label || "";
+}
+$("#search").addEventListener("input", e => buildNav(e.target.value));
+$("#search").addEventListener("keydown", e => {
+  if (e.key !== "Enter") return;
+  const q = e.target.value.trim().toUpperCase();
+  // jump straight to a gate/BE inside its tree
+  if (M.gates[q]) { show(M.gates[q].tree); select("GT", q); }
+  else if (M.basic_events[q]) {
+    for (const [gid, g] of Object.entries(M.gates))
+      if (JSON.stringify(g.formula).includes(q)) { show(g.tree); break; }
+    select("BE", q);
+  }
+});
+
+/* ---------------- pan & zoom ---------------- */
+const svg = $("#svg"), world = $("#world");
+let view = {x: 40, y: 40, k: 1};
+function applyView(){
+  world.setAttribute("transform",
+    `translate(${view.x},${view.y}) scale(${view.k})`);
+}
+svg.addEventListener("wheel", e => {
+  e.preventDefault();
+  const r = svg.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const k2 = Math.min(3, Math.max(.15, view.k * Math.exp(-e.deltaY * .0012)));
+  view.x = mx - (mx - view.x) * (k2 / view.k);
+  view.y = my - (my - view.y) * (k2 / view.k);
+  view.k = k2; applyView();
+}, {passive: false});
+let drag = null;
+svg.addEventListener("pointerdown", e => {
+  drag = {x: e.clientX, y: e.clientY}; svg.classList.add("panning");
+  svg.setPointerCapture(e.pointerId);
+});
+svg.addEventListener("pointermove", e => {
+  if (!drag) return;
+  view.x += e.clientX - drag.x; view.y += e.clientY - drag.y;
+  drag = {x: e.clientX, y: e.clientY}; applyView();
+});
+svg.addEventListener("pointerup", e => {
+  drag = null; svg.classList.remove("panning");
+});
+$("#btn-fit").onclick = fit;
+$("#btn-expand").onclick = () => { collapsed.clear(); render(); };
+function fit(){
+  const bb = world.getBBox();
+  if (!bb.width) return;
+  const r = svg.getBoundingClientRect();
+  const k = Math.min((r.width - 80) / bb.width,
+                     (r.height - 80) / bb.height, 1.4);
+  view = {x: 40 - bb.x * k + (r.width - 80 - bb.width * k) / 2,
+          y: 40 - bb.y * k, k};
+  applyView();
+}
+
+/* ---------------- shared drawing bits ---------------- */
+const KIND_COLOR = {GT: "var(--gate)", BE: "var(--be)", HE: "var(--he)"};
+
+function gateGlyph(g, x, y, op, kOfN){
+  // small logic-shape icon, 18x16, centered at (x,y)
+  const c = "var(--gate)";
+  const grp = el("g", {}, g);
+  if (op === "and"){                       // D shape
+    el("path", {d: `M${x-8},${y+8} v-10 a8,8 0 0 1 16,0 v10 z`,
+      fill: "none", stroke: c, "stroke-width": 1.6}, grp);
+  } else if (op === "or"){                 // chevron shield
+    el("path", {d: `M${x-8},${y+8} q8,-5 16,0 q-2,-13 -8,-16
+      q-6,3 -8,16 z`.replace(/\s+/g," "),
+      fill: "none", stroke: c, "stroke-width": 1.6}, grp);
+  } else if (op === "atleast"){            // hexagon + k/n
+    el("path", {d: `M${x-9},${y} l4,-8 h10 l4,8 l-4,8 h-10 z`,
+      fill: "none", stroke: c, "stroke-width": 1.5}, grp);
+    txt(el("text", {x, y: y+3.5, "text-anchor": "middle",
+      "font-size": 8.5, fill: c, "font-family": "var(--mono)"}, grp), kOfN);
+  } else if (op === "not"){                // circle-bar
+    el("circle", {cx: x, cy: y, r: 7, fill: "none", stroke: c,
+      "stroke-width": 1.6}, grp);
+    el("line", {x1: x-5, y1: y, x2: x+5, y2: y, stroke: c,
+      "stroke-width": 1.6}, grp);
+  } else if (op === "xor"){
+    el("path", {d: `M${x-8},${y+8} q8,-5 16,0 q-2,-13 -8,-16
+      q-6,3 -8,16 z`.replace(/\s+/g," "),
+      fill: "none", stroke: c, "stroke-width": 1.4}, grp);
+    el("path", {d: `M${x-9},${y+10} q9,-5 18,0`, fill: "none",
+      stroke: c, "stroke-width": 1.4}, grp);
+  } else {                                  // pass-through reference
+    el("path", {d: `M${x-7},${y} h14 m-5,-5 l5,5 l-5,5`, fill: "none",
+      stroke: c, "stroke-width": 1.5}, grp);
+  }
+  return grp;
+}
+
+/* ---------------- fault tree rendering ---------------- */
+function fmtFormula(f){
+  if (typeof f === "string") return f;
+  const [op, a] = Object.entries(f)[0];
+  if (op === "not") return `NOT(${fmtFormula(a)})`;
+  if (op === "atleast")
+    return `≥${a.k} of (${a.of.map(fmtFormula).join(", ")})`;
+  return `${op.toUpperCase()}(${a.map(fmtFormula).join(", ")})`;
+}
+function formulaChildren(f){
+  if (typeof f === "string") return [f];
+  const [op, a] = Object.entries(f)[0];
+  if (op === "not") return formulaChildren(a);
+  if (op === "atleast") return a.of.flatMap(formulaChildren);
+  return a.flatMap(formulaChildren);
+}
+function gateOp(f){
+  if (typeof f === "string") return "ref";
+  return Object.keys(f)[0];
+}
+
+function buildFT(gateId, path, seen){
+  const inst = {id: gateId, path, children: [], shared: seen.has(gateId)};
+  if (gateId.startsWith("GT-")){
+    inst.kind = "GT";
+    const g = M.gates[gateId];
+    inst.op = gateOp(g.formula);
+    if (inst.op === "atleast")
+      inst.kOfN = `${g.formula.atleast.k}/${g.formula.atleast.of.length}`;
+    if (!inst.shared || true){ // always expandable; badge marks repeats
+      if (!collapsed.has(path)){
+        const s2 = new Set(seen); s2.add(gateId);
+        for (const ch of formulaChildren(g.formula))
+          inst.children.push(buildFT(ch, path + "/" + ch, s2));
+      } else inst.collapsedHere = true;
+    }
+  } else {
+    inst.kind = gateId.startsWith("BE-") ? "BE" : "HE";
+  }
+  return inst;
+}
+
+const FT_NW = 168, FT_GAPX = 14, FT_NH = 46, FT_LEVEL = 92;
+function layoutFT(n, depth){
+  n.depth = depth;
+  if (!n.children.length){ n.w = FT_NW + FT_GAPX; return n.w; }
+  n.w = 0;
+  for (const c of n.children) n.w += layoutFT(c, depth + 1);
+  n.w = Math.max(n.w, FT_NW + FT_GAPX);
+  return n.w;
+}
+function positionFT(n, x0){
+  n.x = x0 + n.w / 2;
+  n.y = 30 + n.depth * FT_LEVEL;
+  let cx = x0 + (n.w - n.children.reduce((s,c)=>s+c.w,0)) / 2;
+  for (const c of n.children){ positionFT(c, cx); cx += c.w; }
+}
+function drawFT(root){
+  world.innerHTML = "";
+  layoutFT(root, 0); positionFT(root, 0);
+  (function edges(n){
+    for (const c of n.children){
+      const midY = (n.y + FT_NH + c.y) / 2;
+      el("path", {class: "e-line",
+        d: `M${n.x},${n.y + FT_NH} V${midY} H${c.x} V${c.y}`}, world);
+      edges(c);
+    }
+  })(root);
+  (function nodes(n){
+    const g = el("g", {class: "clickable"}, world);
+    const color = KIND_COLOR[n.kind];
+    const selHere = selected === n.kind + ":" + n.id;
+    const card = el("rect", {class: "node-card" + (selHere ? " sel" : ""),
+      x: n.x - FT_NW/2, y: n.y, width: FT_NW, height: FT_NH, rx: 7,
+      stroke: selHere ? color : "var(--line)"}, g);
+    el("rect", {x: n.x - FT_NW/2, y: n.y, width: 3.5, height: FT_NH,
+      rx: 1.5, fill: color}, g);
+    if (n.kind === "GT")
+      gateGlyph(g, n.x - FT_NW/2 + 20, n.y + FT_NH/2, n.op, n.kOfN);
+    const tx = n.x - FT_NW/2 + (n.kind === "GT" ? 36 : 12);
+    txt(el("text", {class: "n-id", x: tx, y: n.y + 18}, g),
+        n.id.length > 19 ? n.id.slice(0, 18) + "…" : n.id);
+    const sub = n.kind === "BE"
+      ? "p = " + sci(M.basic_events[n.id].p)
+      : n.kind === "HE"
+        ? "house · " + M.house_events[n.id].default
+        : (M.gates[n.id].label.length > 26
+            ? M.gates[n.id].label.slice(0, 25) + "…" : M.gates[n.id].label);
+    txt(el("text", {class: n.kind === "BE" ? "n-val" : "n-sub",
+        x: tx, y: n.y + 34}, g), sub);
+    if (n.shared)
+      txt(el("text", {class: "n-sub", x: n.x + FT_NW/2 - 10, y: n.y + 12,
+        "text-anchor": "end", fill: "var(--he)"}, g), "↺");
+    if (n.collapsedHere)
+      txt(el("text", {class: "n-sub", x: n.x + FT_NW/2 - 10, y: n.y + 40,
+        "text-anchor": "end"}, g), "▸ collapsed");
+    g.addEventListener("click", () => select(n.kind, n.id));
+    if (n.kind === "GT")
+      g.addEventListener("dblclick", e => {
+        e.preventDefault();
+        collapsed.has(n.path) ? collapsed.delete(n.path)
+                              : collapsed.add(n.path);
+        render();
+      });
+    for (const c of n.children) nodes(c);
+  })(root);
+  if (REFIT) fit();
+}
+
+/* ---------------- event tree rendering ---------------- */
+const ET_COL = 190, ET_ROW = 58, ET_X0 = 150;
+function drawET(etId){
+  world.innerHTML = "";
+  const et = M.event_trees[etId];
+  const fes = et.fe_order;
+  const seqs = Object.entries(et.sequences)
+    .map(([id, s]) => ({id, ...s}));
+
+  // recursive branch layout over the flat sequence table
+  let row = 0;
+  const segs = [], nodes = [], leaves = [];
+  function branch(list, fi, x, y){
+    if (fi === fes.length || list.length === 1 &&
+        list[0].path[fes[fi]] === undefined){
+      // leaf
+      const s = list[0];
+      leaves.push({...s, x, y});
+      return y;
+    }
+    const fe = fes[fi];
+    const succ = list.filter(s => s.path[fe] === "success");
+    const fail = list.filter(s => s.path[fe] === "failure");
+    const bypass = list.filter(s => s.path[fe] === "bypassed");
+    const x2 = x + ET_COL;
+    if (bypass.length === list.length){
+      segs.push({x1: x, y1: y, x2, y2: y, cls: "branch-by"});
+      return branch(list, fi + 1, x2, y);
+    }
+    let bottom = y;
+    if (succ.length){
+      segs.push({x1: x, y1: y, x2, y2: y, cls: "branch-ok"});
+      bottom = branch(succ, fi + 1, x2, y);
+    }
+    if (fail.length){
+      const fy = bottom + ET_ROW;
+      segs.push({x1: x, y1: y, x2: x, y2: fy, cls: "branch-fail"});
+      segs.push({x1: x, y1: fy, x2, y2: fy, cls: "branch-fail"});
+      nodes.push({x, y, fe});
+      bottom = branch(fail, fi + 1, x2, fy);
+    }
+    return bottom;
+  }
+  const y0 = 90;
+  branch(seqs.sort((a, b) => a.id < b.id ? -1 : 1), 0, ET_X0, y0);
+
+  // initiating event
+  const ie = el("g", {class: "clickable"}, world);
+  el("rect", {class: "node-card", x: 14, y: y0 - 24, width: ET_X0 - 34,
+    height: 48, rx: 7}, ie);
+  el("rect", {x: 14, y: y0 - 24, width: 3.5, height: 48, rx: 1.5,
+    fill: "var(--fail)"}, ie);
+  txt(el("text", {class: "n-id", x: 26, y: y0 - 6}, ie), et.ie.id);
+  txt(el("text", {class: "n-val", x: 26, y: y0 + 12}, ie),
+      sci(et.ie.freq) + " /yr");
+  ie.addEventListener("click", () => select("IE", etId));
+  el("line", {x1: ET_X0 - 20, y1: y0, x2: ET_X0, y2: y0,
+    class: "e-line"}, world);
+
+  // column headers -> click through to the fault tree
+  fes.forEach((fe, i) => {
+    const x = ET_X0 + i * ET_COL + ET_COL / 2;
+    const g = el("g", {}, world);
+    const t1 = txt(el("text", {class: "fe-head", x, y: 30,
+      "text-anchor": "middle"}, g), fe);
+    const t2 = txt(el("text", {class: "fe-sub", x, y: 45,
+      "text-anchor": "middle"}, g), et.functional_events[fe].label);
+    const open = () => {
+      const tree = M.gates[et.functional_events[fe].top_gate]?.tree;
+      if (tree) show(tree);
+    };
+    t1.addEventListener("click", open); t2.addEventListener("click", open);
+  });
+  el("line", {x1: ET_X0, y1: 56, x2: ET_X0 + fes.length * ET_COL, y2: 56,
+    class: "e-line", "stroke-dasharray": "2 5"}, world);
+
+  for (const s of segs)
+    el("line", {x1: s.x1, y1: s.y1, x2: s.x2, y2: s.y2,
+      class: "e-line " + s.cls, "stroke-width": 2}, world);
+  for (const n of nodes)
+    el("circle", {cx: n.x, cy: n.y, r: 3.4, fill: "var(--bg)",
+      stroke: "var(--dim)", "stroke-width": 1.4}, world);
+
+  // sequence chips
+  for (const s of leaves){
+    const g = el("g", {class: "clickable"}, world);
+    const w = 178;
+    const stateColor = s.end_state === "OK" ? "var(--ok)"
+      : s.transfer ? "var(--xfer)" : "var(--fail)";
+    const selHere = selected === "SEQ:" + etId + "/" + s.id;
+    el("line", {x1: s.x, y1: s.y, x2: s.x + 16, y2: s.y,
+      class: "e-line"}, g);
+    el("rect", {class: "node-card" + (selHere ? " sel" : ""),
+      x: s.x + 16, y: s.y - 20, width: w, height: 40, rx: 7,
+      stroke: selHere ? stateColor : "var(--line)"}, g);
+    el("rect", {x: s.x + 16, y: s.y - 20, width: 3.5, height: 40, rx: 1.5,
+      fill: stateColor}, g);
+    txt(el("text", {class: "n-id", x: s.x + 28, y: s.y - 4}, g), s.id);
+    txt(el("text", {class: "seq-freq", x: s.x + 28, y: s.y + 12}, g),
+        (s.freq != null ? sci(s.freq) + " /yr → " : "→ ") +
+        s.end_state + (s.transfer ? " ⇢" : ""));
+    g.addEventListener("click", () => select("SEQ", etId + "/" + s.id));
+  }
+  if (REFIT) fit();
+}
+
+/* ---------------- details panel ---------------- */
+function drow(k, v, mono){
+  return `<div class="d-row"><div class="d-k">${k}</div>
+          <div class="d-v${mono ? " mono" : ""}">${v}</div></div>`;
+}
+function linkify(text){
+  return text.replace(/\b((?:GT|BE|HE|FT|ET)-[A-Z0-9-]+)\b/g,
+    '<a class="lnk" data-id="$1">$1</a>');
+}
+function select(kind, id){
+  selected = kind + ":" + id;
+  const d = $("#details");
+  let h = "<h2>DETAILS</h2>";
+  if (kind === "BE"){
+    const b = M.basic_events[id];
+    h += `<div class="d-id" style="color:var(--be)">${id}</div>
+          <div class="d-lbl">${b.label}</div>`
+      + drow("PROBABILITY", `<span style="color:var(--readout);
+          font-family:var(--mono)">${sci(b.p)}</span>
+          <span class="tag" style="margin-left:8px">${b.model_type}</span>`)
+      + (b.system ? drow("SYSTEM", b.system) : "")
+      + drow("SOURCE", b.provenance.source || "—")
+      + drow("JUSTIFICATION", b.provenance.justification || "—");
+  } else if (kind === "GT"){
+    const g = M.gates[id];
+    h += `<div class="d-id" style="color:var(--gate)">${id}</div>
+          <div class="d-lbl">${g.label}</div>`
+      + drow("FORMULA", linkify(fmtFormula(g.formula)), true)
+      + drow("DEFINED IN", linkify(g.tree), true);
+  } else if (kind === "HE"){
+    const he = M.house_events[id];
+    h += `<div class="d-id" style="color:var(--he)">${id}</div>
+          <div class="d-lbl">${he.label}</div>`
+      + drow("DEFAULT", String(he.default), true)
+      + drow("NOTE", "House events fold to constants at compile time; "
+          + "override per configuration or per sequence.");
+  } else if (kind === "SEQ"){
+    const [etId, sid] = id.split("/");
+    const s = M.event_trees[etId].sequences[sid];
+    h += `<div class="d-id">${sid}</div>
+          <div class="d-lbl">${etId}</div>`
+      + drow("FREQUENCY", s.freq != null
+          ? `<span style="color:var(--readout);font-family:var(--mono)">
+             ${sci(s.freq)} /yr</span>`
+          : "run ci/quantify.py and rebuild with --results")
+      + drow("END STATE", `<span class="tag">${s.end_state}</span>`
+          + (s.transfer ? ` → ${linkify(s.transfer)}` : ""))
+      + drow("PATH", Object.entries(s.path).map(([fe, o]) =>
+          `<div>${fe}: <span style="color:${
+            o === "success" ? "var(--ok)" : o === "failure"
+              ? "var(--fail)" : "var(--faint)"}">${o}</span></div>`
+        ).join(""), true);
+  } else if (kind === "IE"){
+    const et = M.event_trees[id];
+    h += `<div class="d-id" style="color:var(--fail)">${et.ie.id}</div>
+          <div class="d-lbl">${et.ie.label}</div>`
+      + drow("FREQUENCY", `<span style="color:var(--readout);
+          font-family:var(--mono)">${sci(et.ie.freq)} /yr</span>`);
+  }
+  d.innerHTML = h;
+  d.querySelectorAll(".lnk").forEach(a =>
+    a.addEventListener("click", () => {
+      const t = a.dataset.id;
+      if (M.fault_trees[t] || M.event_trees[t]) show(t);
+      else if (M.gates[t]) { show(M.gates[t].tree); select("GT", t); }
+    }));
+  render(false);
+}
+
+/* ---------------- view switching ---------------- */
+function show(id){
+  current = id; selected = null; collapsed.clear();
+  buildNav($("#search").value);
+  render();
+}
+let REFIT = true;
+function render(refit){
+  if (!current) return;
+  REFIT = refit !== false;
+  if (M.fault_trees[current])
+    drawFT(buildFT(M.fault_trees[current].top_gate,
+                   M.fault_trees[current].top_gate, new Set()));
+  else drawET(current);
+}
+buildNav("");
+show(Object.keys(M.event_trees)[0] || Object.keys(M.fault_trees)[0]);
+</script>
+</body>
+</html>

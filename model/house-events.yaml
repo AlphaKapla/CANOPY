@@ -1,0 +1,20 @@
+# House events: boolean flags. Defaults declared here; configurations in
+# model.yaml override them. Event trees may also set them per branch
+# (e.g. success-criteria switching).
+house_events:
+
+  HE-ECC-TRAIN-A-OOS:
+    label: "ECCS train A out of service"
+    default: false
+    provenance:
+      source: "Model construction"
+      justification: "Configuration flag for planned-maintenance studies."
+
+  HE-OFFSITE-POWER-AVAILABLE:
+    label: "Offsite power available"
+    default: true
+    provenance:
+      source: "Model construction"
+      justification: >
+        Set false by LOOP event-tree sequences to switch support-system
+        alignment inside shared fault trees.

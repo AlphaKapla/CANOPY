@@ -1,0 +1,8 @@
+engine/target/
+*.json.results
+head.json
+base.json
+delta.md
+psa-viewer.html
+results.json
+property-failure-*/

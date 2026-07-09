@@ -1,0 +1,11 @@
+# Reactor protection system (illustrative minimal tree).
+fault_trees:
+
+  FT-RPS:
+    label: "Reactor trip fails on demand"
+    top_gate: GT-RT-TOP
+    gates:
+      GT-RT-TOP:
+        label: "Reactor fails to trip"
+        formula:
+          or: [BE-RPS-BREAKER-CCF, BE-RPS-LOGIC-FAIL]

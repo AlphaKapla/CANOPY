@@ -1,0 +1,16 @@
+[package]
+name = "canopy"
+version = "0.1.0"
+edition = "2021"
+description = "Canopy: BDD-based PSA quantification engine (exact fault-tree and event-tree analysis)"
+
+[dependencies]
+serde = { version = "=1.0.203", features = ["derive"] }
+serde_yaml = "=0.9.34"
+anyhow = "=1.0.86"
+indexmap = "=2.2.6"
+serde_json = "=1.0.117"
+
+[profile.release]
+lto = true
+codegen-units = 1

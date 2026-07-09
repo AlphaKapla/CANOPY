@@ -1,0 +1,538 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/psa-model/0.1.0/schema.json",
+  "title": "Git-native PSA model schema v0.1.0",
+  "description": "Validate each YAML file (parsed to JSON) against the matching $defs entry: basicEventsFile, faultTreeFile, eventTreeFile, parametersFile, houseEventsFile, ccfGroupsFile. Any file may hold one or many entities of its kind (e.g. fault_trees is a mapping); file layout is a team convention, not a format rule. Referential integrity across files is checked by the separate lint step, not by this schema.",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^(BE|GT|FT|ET|FE|IE|HE|PAR|CCF|SEQ)-[A-Z0-9][A-Z0-9-]*$"
+    },
+    "paramRef": {
+      "type": "object",
+      "properties": {
+        "param": {
+          "type": "string",
+          "pattern": "^PAR-[A-Z0-9][A-Z0-9-]*$"
+        }
+      },
+      "required": [
+        "param"
+      ],
+      "additionalProperties": false
+    },
+    "unit": {
+      "enum": [
+        "per_hour",
+        "per_year",
+        "per_demand",
+        "hour",
+        "year",
+        "dimensionless"
+      ]
+    },
+    "quantity": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "number",
+          "minimum": 0
+        },
+        "unit": {
+          "$ref": "#/$defs/unit"
+        },
+        "uncertainty": {
+          "$ref": "#/$defs/uncertainty"
+        }
+      },
+      "required": [
+        "value",
+        "unit"
+      ],
+      "additionalProperties": false
+    },
+    "quantityOrRef": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/quantity"
+        },
+        {
+          "$ref": "#/$defs/paramRef"
+        }
+      ]
+    },
+    "uncertainty": {
+      "type": "object",
+      "oneOf": [
+        {
+          "properties": {
+            "distribution": {
+              "const": "lognormal"
+            },
+            "error_factor": {
+              "type": "number",
+              "exclusiveMinimum": 1
+            }
+          },
+          "required": [
+            "distribution",
+            "error_factor"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "distribution": {
+              "const": "beta"
+            },
+            "alpha": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "beta": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          },
+          "required": [
+            "distribution",
+            "alpha",
+            "beta"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "distribution": {
+              "const": "gamma"
+            },
+            "shape": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "scale": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          },
+          "required": [
+            "distribution",
+            "shape",
+            "scale"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "distribution": {
+              "const": "uniform"
+            },
+            "lower": {
+              "type": "number",
+              "minimum": 0
+            },
+            "upper": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          },
+          "required": [
+            "distribution",
+            "lower",
+            "upper"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "minLength": 3
+        },
+        "justification": {
+          "type": "string",
+          "minLength": 3
+        }
+      },
+      "required": [
+        "source",
+        "justification"
+      ],
+      "additionalProperties": false
+    },
+    "failureModel": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "probability"
+            },
+            "value": {
+              "$ref": "#/$defs/quantityOrRef"
+            },
+            "unit": {
+              "const": "per_demand"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "rate-mission"
+            },
+            "rate": {
+              "$ref": "#/$defs/quantityOrRef"
+            },
+            "mission_time": {
+              "$ref": "#/$defs/quantityOrRef"
+            }
+          },
+          "required": [
+            "type",
+            "rate",
+            "mission_time"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "rate-repair"
+            },
+            "rate": {
+              "$ref": "#/$defs/quantityOrRef"
+            },
+            "mttr": {
+              "$ref": "#/$defs/quantityOrRef"
+            }
+          },
+          "required": [
+            "type",
+            "rate",
+            "mttr"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "frequency"
+            },
+            "value": {
+              "$ref": "#/$defs/quantityOrRef"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "basicEvent": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 3
+        },
+        "system": {
+          "type": "string"
+        },
+        "component": {
+          "type": "string"
+        },
+        "failure_mode": {
+          "type": "string"
+        },
+        "failure_model": {
+          "$ref": "#/$defs/failureModel"
+        },
+        "uncertainty": {
+          "$ref": "#/$defs/uncertainty"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      },
+      "required": [
+        "label",
+        "failure_model",
+        "provenance"
+      ],
+      "additionalProperties": false
+    },
+    "formula": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/id"
+        },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 1,
+          "properties": {
+            "and": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "$ref": "#/$defs/formula"
+              }
+            },
+            "or": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "$ref": "#/$defs/formula"
+              }
+            },
+            "xor": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "$ref": "#/$defs/formula"
+              }
+            },
+            "not": {
+              "$ref": "#/$defs/formula"
+            },
+            "atleast": {
+              "type": "object",
+              "properties": {
+                "k": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "of": {
+                  "type": "array",
+                  "minItems": 2,
+                  "items": {
+                    "$ref": "#/$defs/formula"
+                  }
+                }
+              },
+              "required": [
+                "k",
+                "of"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "basicEventsFile": {
+      "type": "object",
+      "properties": {
+        "basic_events": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^BE-[A-Z0-9][A-Z0-9-]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/basicEvent"
+          }
+        }
+      },
+      "required": [
+        "basic_events"
+      ],
+      "additionalProperties": false
+    },
+    "faultTreeFile": {
+      "type": "object",
+      "properties": {
+        "fault_trees": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^FT-[A-Z0-9][A-Z0-9-]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/faultTree"
+          }
+        }
+      },
+      "required": [
+        "fault_trees"
+      ],
+      "additionalProperties": false
+    },
+    "eventTreeFile": {
+      "type": "object",
+      "properties": {
+        "event_tree": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^ET-[A-Z0-9][A-Z0-9-]*$"
+            },
+            "label": {
+              "type": "string"
+            },
+            "initiating_event": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^IE-[A-Z0-9][A-Z0-9-]*$"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "frequency": {
+                  "$ref": "#/$defs/quantity"
+                },
+                "provenance": {
+                  "$ref": "#/$defs/provenance"
+                }
+              },
+              "required": [
+                "id",
+                "label",
+                "frequency",
+                "provenance"
+              ],
+              "additionalProperties": false
+            },
+            "functional_events": {
+              "type": "object",
+              "propertyNames": {
+                "pattern": "^FE-[A-Z0-9][A-Z0-9-]*$"
+              },
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "top_gate": {
+                    "type": "string",
+                    "pattern": "^GT-[A-Z0-9][A-Z0-9-]*$"
+                  }
+                },
+                "required": [
+                  "label",
+                  "top_gate"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "sequences": {
+              "type": "object",
+              "propertyNames": {
+                "pattern": "^SEQ-[A-Z0-9][A-Z0-9-]*$"
+              },
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "object",
+                    "propertyNames": {
+                      "pattern": "^FE-[A-Z0-9][A-Z0-9-]*$"
+                    },
+                    "additionalProperties": {
+                      "enum": [
+                        "success",
+                        "failure",
+                        "bypassed"
+                      ]
+                    }
+                  },
+                  "end_state": {
+                    "type": "string"
+                  },
+                  "transfer": {
+                    "type": "string",
+                    "pattern": "^ET-[A-Z0-9][A-Z0-9-]*$"
+                  },
+                  "house_events": {
+                    "type": "object",
+                    "propertyNames": {
+                      "pattern": "^HE-[A-Z0-9][A-Z0-9-]*$"
+                    },
+                    "additionalProperties": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "required": [
+                  "path",
+                  "end_state"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "id",
+            "label",
+            "initiating_event",
+            "functional_events",
+            "sequences"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "event_tree"
+      ],
+      "additionalProperties": false
+    },
+    "faultTree": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "top_gate": {
+          "type": "string",
+          "pattern": "^GT-[A-Z0-9][A-Z0-9-]*$"
+        },
+        "gates": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^GT-[A-Z0-9][A-Z0-9-]*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "formula": {
+                "$ref": "#/$defs/formula"
+              }
+            },
+            "required": [
+              "label",
+              "formula"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "label",
+        "top_gate",
+        "gates"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

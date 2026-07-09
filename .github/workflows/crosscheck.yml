@@ -1,0 +1,47 @@
+# Independent cross-verification against SCRAM (manual: SCRAM is built
+# from source, ~5 min). Run before tagging a model revision or after
+# engine changes.
+name: SCRAM cross-verification
+on:
+  workflow_dispatch:
+    inputs:
+      cases:
+        description: "Number of generated models"
+        default: "100"
+
+jobs:
+  crosscheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml jsonschema
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release --manifest-path engine/Cargo.toml
+
+      - name: Build SCRAM from source
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q cmake libxml2-dev libboost-dev \
+            libboost-program-options-dev libboost-filesystem-dev \
+            libboost-random-dev libboost-math-dev libboost-date-time-dev \
+            libboost-exception-dev
+          git clone --depth 1 https://github.com/rakhimov/scram /tmp/scram
+          # One-line fix for boost >= 1.73 (macro removed upstream):
+          sed -i 's/BOOST_THROW_EXCEPTION_CURRENT_FUNCTION/BOOST_CURRENT_FUNCTION/' \
+            /tmp/scram/src/error.h
+          sed -i 's|#include "ext/source_info.h"|#include <boost/current_function.hpp>\n#include "ext/source_info.h"|' \
+            /tmp/scram/src/error.h
+          cmake -S /tmp/scram -B /tmp/scram/build \
+            -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=OFF -DBUILD_TESTS=OFF
+          make -C /tmp/scram/build -j$(nproc)
+          sudo make -C /tmp/scram/build install
+
+      - name: Cross-check (demo + generated models)
+        run: python ci/crosscheck_scram.py --cases ${{ inputs.cases }}
+
+      - name: Aralia benchmark (both engines)
+        run: |
+          PSA_BENCH_MEM_GIB=4 python ci/benchmark_mef.py \
+            /tmp/scram/input/Aralia --timeout 120

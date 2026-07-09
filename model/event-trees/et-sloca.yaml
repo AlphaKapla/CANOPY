@@ -1,0 +1,60 @@
+# Event tree: small-break LOCA.
+#
+# Design choice: sequences are a FLAT TABLE keyed by sequence ID, not a
+# nested branch structure. Nested trees diff terribly (one added branch
+# re-indents everything below it); a flat table means adding a sequence
+# touches only its own lines. The graphical tree is a *rendering* derived
+# from this table, and CI checks the table is complete and consistent
+# (every functional event resolved in every sequence, no duplicates).
+event_tree:
+  id: ET-SLOCA
+  label: "Small-break LOCA"
+
+  initiating_event:
+    id: IE-SLOCA
+    label: "Small-break LOCA (0.5–2 inch equivalent)"
+    frequency:
+      value: 5.0e-4
+      unit: per_year
+      uncertainty:
+        distribution: lognormal
+        error_factor: 6.0
+    provenance:
+      source: "NUREG/CR-6928 initiating-event data, 2020 update"
+      justification: "Generic small LOCA frequency."
+
+  # Column order of the tree, left to right.
+  functional_events:
+    FE-RT:
+      label: "Reactor trip"
+      top_gate: GT-RT-TOP           # defined in fault-trees/ft-rps.yaml
+    FE-ECC:
+      label: "ECCS injection"
+      top_gate: GT-ECC-INJ-TOP
+    FE-RHR:
+      label: "Long-term heat removal"
+      top_gate: GT-RHR-TOP          # defined in fault-trees/ft-rhr.yaml
+
+  # path: outcome of each functional event along the sequence, in
+  # functional_events order. success | failure | bypassed (not questioned).
+  # end_state ids map to risk metrics via model.yaml.
+  sequences:
+
+    SEQ-SLOCA-01:
+      path: {FE-RT: success, FE-ECC: success, FE-RHR: success}
+      end_state: OK
+
+    SEQ-SLOCA-02:
+      path: {FE-RT: success, FE-ECC: success, FE-RHR: failure}
+      end_state: CD
+
+    SEQ-SLOCA-03:
+      path: {FE-RT: success, FE-ECC: failure, FE-RHR: bypassed}
+      end_state: CD
+      # Per-sequence house-event overrides (success-criteria switching)
+      # would go here as: house_events: {HE-...: true}
+
+    SEQ-SLOCA-04:
+      path: {FE-RT: failure, FE-ECC: bypassed, FE-RHR: bypassed}
+      end_state: XFER-ATWS          # transfer to ATWS event tree
+      transfer: ET-ATWS

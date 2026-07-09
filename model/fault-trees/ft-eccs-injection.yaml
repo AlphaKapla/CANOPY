@@ -1,0 +1,54 @@
+# Fault tree: ECCS injection function.
+#
+# Formulas are structured mappings, one operator per node:
+#   {and: [...]}  {or: [...]}  {not: X}  {xor: [...]}
+#   {atleast: {k: 2, of: [...]}}                      # k-of-n vote
+# Operands are IDs of gates (GT-), basic events (BE-), house events (HE-),
+# or gates in other fault trees (transfer — just reference the ID; the
+# reference linter resolves it globally).
+# A file holds ONE OR MANY fault trees under `fault_trees:`. Splitting is a
+# team convention (per tree, per system, or everything in one file) — the
+# loader only sees the merged ID space. This model splits per system so that
+# `git log -- <file>` gives per-system history and CODEOWNERS can route
+# review; a small model could keep every tree in a single fault-trees.yaml.
+fault_trees:
+
+  FT-ECCS-INJECTION:
+    label: "ECCS fails to inject during small LOCA"
+    top_gate: GT-ECC-INJ-TOP
+    gates:
+
+      GT-ECC-INJ-TOP:
+        label: "ECCS injection function fails"
+        # Success criterion: 1 of 2 trains. Function fails if both fail.
+        formula:
+          and: [GT-ECC-TRAIN-A, GT-ECC-TRAIN-B]
+
+      GT-ECC-TRAIN-A:
+        label: "ECCS train A fails to inject"
+        formula:
+          or:
+            - BE-ECC-PMP-A-FTS
+            - BE-ECC-PMP-A-FTR
+            - BE-ECC-PMP-A-TM
+            - HE-ECC-TRAIN-A-OOS      # configuration flag folds train out
+            - GT-ECC-SUPPORT-A        # transfer to support-systems tree
+
+      GT-ECC-TRAIN-B:
+        label: "ECCS train B fails to inject"
+        formula:
+          or:
+            - BE-ECC-PMP-B-FTS
+            - BE-ECC-PMP-B-FTR
+            - GT-ECC-SUPPORT-B        # transfer
+
+      # Support-system transfers stubbed here for the fragment to be
+      # self-contained; in the real model these live in their own files
+      # (fault-trees/ft-support-*.yaml) and these gate defs are deleted.
+      GT-ECC-SUPPORT-A:
+        label: "Train A support (power/cooling) fails [stub]"
+        formula: BE-ECC-PMP-A-TM      # placeholder: pass-through to BE
+
+      GT-ECC-SUPPORT-B:
+        label: "Train B support (power/cooling) fails [stub]"
+        formula: BE-ECC-PMP-B-FTS     # placeholder: pass-through to BE

@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+"""Compare two quantification results; emit a markdown risk-delta report.
+
+Usage: compare.py <base.json> <head.json> > delta.md
+Exit 0 always (reporting, not gating; add thresholds here if you want gates).
+"""
+import json
+import sys
+
+MARKER = "<!-- psa-delta -->"
+REL_TOL = 1e-9          # ignore numerical noise below this relative change
+TOP_CUT_SETS = 10
+
+
+def fmt(x: float) -> str:
+    return f"{x:.4e}"
+
+
+def delta_cell(base: float, head: float) -> str:
+    if base == head == 0.0:
+        return "—"
+    if base == 0.0:
+        return "**new**"
+    rel = (head - base) / base
+    if abs(rel) < REL_TOL:
+        return "—"
+    arrow = "🔺" if rel > 0 else "🔽"
+    return f"{arrow} {rel:+.2%} (×{head / base:.3g})"
+
+
+def cut_key(cs: dict) -> tuple:
+    return tuple(sorted(cs["events"]))
+
+
+def main() -> int:
+    base = json.load(open(sys.argv[1]))
+    head = json.load(open(sys.argv[2]))
+    out = [MARKER, "## PSA risk-metric delta", ""]
+
+    # ---- aggregate metrics across all event trees --------------------------
+    def metric_totals(results: dict) -> dict[str, float]:
+        totals: dict[str, float] = {}
+        for et in results.values():
+            for m in et.get("metrics", []):
+                totals[m["id"]] = totals.get(m["id"], 0.0) + m["value_per_year"]
+        return totals
+
+    mb, mh = metric_totals(base), metric_totals(head)
+    out += ["| metric | base (/yr) | head (/yr) | change |",
+            "|---|---|---|---|"]
+    for mid in sorted(set(mb) | set(mh)):
+        b, h = mb.get(mid, 0.0), mh.get(mid, 0.0)
+        out.append(f"| **{mid}** | {fmt(b)} | {fmt(h)} | {delta_cell(b, h)} |")
+    out.append("")
+
+    # ---- per-sequence deltas ------------------------------------------------
+    changed_rows = []
+    for et_id in sorted(set(base) | set(head)):
+        bseq = {s["id"]: s for s in base.get(et_id, {}).get("sequences", [])}
+        hseq = {s["id"]: s for s in head.get(et_id, {}).get("sequences", [])}
+        for sid in sorted(set(bseq) | set(hseq)):
+            b = bseq.get(sid, {}).get("frequency_per_year", 0.0)
+            h = hseq.get(sid, {}).get("frequency_per_year", 0.0)
+            if b == 0.0 and h == 0.0:
+                continue
+            rel = abs(h - b) / b if b else float("inf")
+            if rel >= REL_TOL:
+                es = (hseq.get(sid) or bseq.get(sid)).get("end_state", "?")
+                changed_rows.append(
+                    f"| {et_id} / {sid} | {es} | {fmt(b)} | {fmt(h)} "
+                    f"| {delta_cell(b, h)} |")
+    if changed_rows:
+        out += ["### Changed sequences",
+                "| sequence | end state | base (/yr) | head (/yr) | change |",
+                "|---|---|---|---|---|"]
+        out += changed_rows
+        out.append("")
+
+    # ---- cut set diff --------------------------------------------------------
+    def all_cuts(results: dict) -> dict[tuple, float]:
+        cuts: dict[tuple, float] = {}
+        for et_id, et in results.items():
+            for s in et.get("sequences", []):
+                for cs in s.get("cut_sets", []):
+                    k = (et_id, s["id"], cut_key(cs))
+                    cuts[k] = cs["frequency_per_year"]
+        return cuts
+
+    cb, ch = all_cuts(base), all_cuts(head)
+    added = sorted(
+        (ch[k], k) for k in ch.keys() - cb.keys())[::-1][:TOP_CUT_SETS]
+    removed = sorted(
+        (cb[k], k) for k in cb.keys() - ch.keys())[::-1][:TOP_CUT_SETS]
+    moved = sorted(
+        ((abs(ch[k] - cb[k]), k) for k in ch.keys() & cb.keys()
+         if cb[k] and abs(ch[k] - cb[k]) / cb[k] >= REL_TOL),
+        reverse=True)[:TOP_CUT_SETS]
+
+    if added or removed or moved:
+        out.append("### Cut set changes")
+    if added:
+        out.append("**New cut sets:**")
+        for f, (et, sid, ev) in added:
+            out.append(f"- `{{{', '.join(ev)}}}` in {et}/{sid} — {fmt(f)} /yr")
+        out.append("")
+    if removed:
+        out.append("**Removed cut sets:**")
+        for f, (et, sid, ev) in removed:
+            out.append(f"- `{{{', '.join(ev)}}}` in {et}/{sid} — was "
+                       f"{fmt(f)} /yr")
+        out.append("")
+    if moved:
+        out.append("**Re-ranked cut sets:**")
+        for _, k in moved:
+            et, sid, ev = k
+            out.append(f"- `{{{', '.join(ev)}}}` in {et}/{sid}: "
+                       f"{fmt(cb[k])} → {fmt(ch[k])} /yr "
+                       f"({delta_cell(cb[k], ch[k])})")
+        out.append("")
+
+    if not changed_rows and not (added or removed or moved):
+        out.append("_No risk-significant changes: model edit is "
+                   "quantitatively neutral._")
+
+    out.append("")
+    out.append("_Exact BDD quantification; sequence frequencies include "
+               "success-branch terms. Cut sets listed per delete-term "
+               "convention._")
+    print("\n".join(out))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

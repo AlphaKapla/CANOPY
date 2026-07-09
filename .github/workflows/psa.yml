@@ -1,0 +1,107 @@
+name: PSA model CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml jsonschema
+      - name: Validate model (schema + reference lint)
+        run: python ci/validate.py model schema/psa-model.schema.json
+
+  quantify:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # need base commit for the delta
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            engine/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('engine/Cargo.lock') }}
+
+      - name: Build quantification engine
+        run: cargo build --release --manifest-path engine/Cargo.toml
+
+      - name: Property-based validation (engine vs brute-force oracle)
+        run: python ci/property_test.py --cases 60 --seed 20260708
+
+      - name: Quantify head
+        run: python ci/quantify.py model head.json
+
+      - name: Quantify base
+        if: github.event_name == 'pull_request'
+        run: |
+          git worktree add /tmp/base ${{ github.event.pull_request.base.sha }}
+          # Engine binary from head is used for both sides: the model is
+          # what's being diffed, not the engine. (If the PR changes the
+          # engine itself, results are computed with the NEW engine for
+          # both, which is the comparison you want.)
+          python ci/quantify.py /tmp/base/model base.json
+
+      - name: Compute risk delta
+        if: github.event_name == 'pull_request'
+        run: python ci/compare.py base.json head.json > delta.md
+
+      - name: Upload quantification results
+        uses: actions/upload-artifact@v4
+        with:
+          name: quantification-results
+          path: |
+            head.json
+            base.json
+            delta.md
+          if-no-files-found: ignore
+
+      - name: Post or update PR comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('delta.md', 'utf8');
+            const marker = '<!-- psa-delta -->';
+            const {data: comments} = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const prev = comments.find(c => c.body.includes(marker));
+            if (prev) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: prev.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

@@ -1,0 +1,25 @@
+basic_events:
+
+  BE-RPS-BREAKER-CCF:
+    label: "Reactor trip breakers fail to open (common cause)"
+    system: RPS
+    component: BREAKERS
+    failure_mode: CCF
+    failure_model:
+      type: probability
+      value: {value: 2.0e-5, unit: per_demand}
+    provenance:
+      source: "NUREG/CR-5500 vol. 2, RPS reliability study"
+      justification: "Illustrative CCF-dominated trip breaker value."
+
+  BE-RPS-LOGIC-FAIL:
+    label: "RPS actuation logic fails"
+    system: RPS
+    component: LOGIC
+    failure_mode: FOD
+    failure_model:
+      type: probability
+      value: {value: 1.0e-5, unit: per_demand}
+    provenance:
+      source: "NUREG/CR-5500 vol. 2, RPS reliability study"
+      justification: "Illustrative logic-train failure value."

@@ -1,0 +1,35 @@
+# Named parameters. Anything used in more than one place, or that an analyst
+# might plausibly want to vary in a sensitivity study, gets a parameter.
+parameters:
+
+  PAR-MISSION-TIME-24H:
+    label: "Standard 24-hour mission time"
+    value: 24.0
+    unit: hour
+    provenance:
+      source: "Plant PSA success criteria notebook, sec. 3.2"
+      justification: "24 h stabilization assumed for all front-line systems"
+
+  PAR-ECC-PMP-FR:
+    label: "ECCS pump fail-to-run rate"
+    value: 3.0e-5
+    unit: per_hour
+    uncertainty:
+      distribution: lognormal
+      error_factor: 3.0
+    provenance:
+      source: "NUREG/CR-6928, 2020 parameter update, MDP standby FTR"
+      justification: >
+        Generic industry value adopted pending plant-specific Bayesian
+        update; see issue #42 for the data-collection task.
+
+  PAR-ECC-PMP-FTS:
+    label: "ECCS pump fail-to-start probability"
+    value: 1.2e-3
+    unit: per_demand
+    uncertainty:
+      distribution: lognormal
+      error_factor: 5.0
+    provenance:
+      source: "NUREG/CR-6928, 2020 parameter update, MDP standby FTS"
+      justification: "Generic industry value."
