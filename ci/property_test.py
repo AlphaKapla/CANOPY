@@ -329,7 +329,8 @@ def run_case(rng, engine, keep_dir):
              "schema/psa-model.schema.json"],
             capture_output=True, text=True)
         if v.returncode != 0:
-            problems.append("validate.py rejected the model:\n" + v.stdout)
+            problems.append("validate.py rejected the model:\n"
+                            + v.stdout + v.stderr)
 
         run = lambda tgt: json.loads(subprocess.run(
             [engine, d, tgt, "--json", "--mcs-limit", "100000"],
