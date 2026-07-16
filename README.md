@@ -109,6 +109,30 @@ git worktree add /tmp/base main && python ci/quantify.py /tmp/base/model base.js
 python ci/compare.py base.json head.json
 ```
 
+## Consequence report: cut sets and importance for CD
+
+The classic PSA review tables — dominant minimal cut sets and basic-event
+importance for a consequence such as core damage — pooled across every
+qualifying sequence in every event tree:
+
+```
+python ci/quantify.py model head.json
+python ci/consequence_report.py head.json --metric CDF --model model
+```
+
+On the demo model this prints the CDF total (2.2082e-8 /yr), the ranked
+cut-set table (dominated by the ECC pump CCF pair at 57.9%), and a
+basic-event importance table (minimal-cut-set Fussell–Vesely). Variants:
+
+```
+python ci/consequence_report.py head.json --end-state CD          # no model.yaml lookup
+python ci/consequence_report.py head.json --metric CDF --model model --json --top 15
+```
+
+Importance here is the standard cut-set-based Fussell–Vesely measure, not
+the BDD-exact Birnbaum the engine reports per fault tree — see
+`docs/limitations.md` for the overlap/coverage caveat.
+
 ## Visualization
 
 `viz/build_viz.py` compiles the model into a single self-contained
