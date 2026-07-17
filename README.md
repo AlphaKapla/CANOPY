@@ -145,7 +145,10 @@ commit it:
 ```
 python ci/quantify.py model results.json          # optional, adds numbers
 python viz/build_viz.py model psa-viewer.html --results results.json
-open psa-viewer.html                               # any browser, no server
+# Open visualizer in a browser (no server needed):
+open psa-viewer.html                   # if Mac 
+xdg-open psa-viewer.html               # if Linux  
+./psa-viewer.html                      # if Windows
 ```
 
 Works offline; suitable as a CI artifact or a gh-pages deploy per tag.
